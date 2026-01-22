@@ -77,14 +77,14 @@ app.post('/imap/resolve-uid', async (req, res) => {
 });
 
 app.post('/imap/move', async (req, res) => {
-  const { venue_id, uid, folder, mark_as_seen } = req.body;
+  const { venue_id, uid, folder, source_folder, mark_as_seen } = req.body;
   if (!venue_id || !uid || !folder) {
     return res.status(400).json({ error: 'Missing fields: venue_id, uid, folder required' });
   }
 
   try {
     const account = await getEmailAccountByVenueId(venue_id);
-    const result = await moveEmail(account, { uid, folder, mark_as_seen });
+    const result = await moveEmail(account, { uid, folder, source_folder, mark_as_seen });
     return res.json(result);
   } catch (err) {
     console.error('[move]', err.message);

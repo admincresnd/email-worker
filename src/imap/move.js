@@ -1,12 +1,13 @@
 import { createImapClient } from './client.js';
 
-export async function moveEmail(account, { uid, folder, mark_as_seen }) {
+export async function moveEmail(account, { uid, folder, source_folder, mark_as_seen }) {
   const client = createImapClient(account);
+  const sourceMailbox = source_folder || 'INBOX';
 
   try {
     await client.connect();
 
-    const lock = await client.getMailboxLock('INBOX');
+    const lock = await client.getMailboxLock(sourceMailbox);
 
     try {
       if (mark_as_seen === true) {
