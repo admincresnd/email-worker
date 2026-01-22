@@ -19,7 +19,7 @@ export async function moveEmail(account, { uid, folder, source_folder, mark_as_s
       }
 
       const result = await client.messageMove({ uid }, folder, { uid: true });
-      console.log(`[move] Moved uid=${uid} to folder="${folder}"`);
+      console.log(`[move] Moved uid=${uid} from="${sourceMailbox}" to="${folder}"`);
 
       return { success: true, destination: folder, uid: result?.destination?.uid || null };
     } finally {
