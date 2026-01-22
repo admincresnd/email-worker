@@ -1,0 +1,32 @@
+import { createImapClient } from './client.js';
+
+export async function moveEmail(account, { uid, folder, mark_as_seen }) {
+  const client = createImapClient(account);
+
+  try {
+    await client.connect();
+
+    const lock = await client.getMailboxLock('INBOX');
+
+    try {
+      if (mark_as_seen === true) {
+        await client.messageFlagsAdd({ uid }, ['\\Seen'], { uid: true });
+        console.log(`[move] Marked uid=${uid} as seen`);
+      } else if (mark_as_seen === false) {
+        await client.messageFlagsRemove({ uid }, ['\\Seen'], { uid: true });
+        console.log(`[move] Marked uid=${uid} as unseen`);
+      }
+
+      const result = await client.messageMove({ uid }, folder, { uid: true });
+      console.log(`[move] Moved uid=${uid} to folder="${folder}"`);
+
+      return { success: true, destination: folder, uid: result?.destination?.uid || null };
+    } finally {
+      lock.release();
+    }
+  } finally {
+    try {
+      await client.logout();
+    } catch {}
+  }
+}
