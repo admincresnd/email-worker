@@ -26,6 +26,11 @@ export async function moveEmail(account, { uid, folder, source_folder, mark_as_s
         console.log(`[move] Marked uid=${uid} as unflagged`);
       }
 
+      if (sourceMailbox === folder) {
+        console.log(`[move] Skipping move - uid=${uid} already in folder="${folder}"`);
+        return { success: true, destination: folder, uid: uid, skipped_move: true };
+      }
+
       const result = await client.messageMove({ uid }, folder, { uid: true });
       console.log(`[move] Moved uid=${uid} from="${sourceMailbox}" to="${folder}"`);
 
