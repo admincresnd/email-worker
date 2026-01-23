@@ -6,6 +6,7 @@ import { listenToInbox } from './src/imap/listener.js';
 import { resolveUid, listFolders } from './src/imap/resolve.js';
 import { moveEmail } from './src/imap/move.js';
 import { sendEmail } from './src/smtp/send.js';
+import { createDraft } from './src/imap/draft.js';
 
 dotenv.config();
 
@@ -104,6 +105,27 @@ app.post('/smtp/send', async (req, res) => {
     return res.json(result);
   } catch (err) {
     console.error('[smtp/send]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/draft', async (req, res) => {
+  console.log('[draft] Request received:', JSON.stringify(req.body));
+  const { venue_id, from, to, subject, html, folder_path } = req.body;
+  if (!venue_id || !from || !to || !subject || !folder_path) {
+    console.log('[draft] Missing required fields');
+    return res.status(400).json({ error: 'Missing fields: venue_id, from, to, subject, folder_path required' });
+  }
+
+  try {
+    console.log(`[draft] Looking up account for venue_id=${venue_id}`);
+    const account = await getEmailAccountByVenueId(venue_id);
+    console.log(`[draft] Creating draft for account: ${account.imap_username}`);
+    const result = await createDraft(account, { from, to, subject, html, folder_path });
+    console.log('[draft] Success:', result);
+    return res.json(result);
+  } catch (err) {
+    console.error('[draft] Error:', err.message);
     return res.status(500).json({ error: err.message });
   }
 });
