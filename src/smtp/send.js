@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { createImapClient } from '../imap/client.js';
 
 export async function sendEmail(account, { from, to, subject, html, inReplyTo, references, folder_path }) {
+  console.log(`[smtp] Creating transporter: host=${account.smtp_host} port=${account.smtp_port} user=${account.smtp_username}`);
   const transporter = nodemailer.createTransport({
     host: account.smtp_host,
     port: account.smtp_port,
