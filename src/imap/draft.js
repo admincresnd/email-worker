@@ -1,6 +1,6 @@
 import { createImapClient } from './client.js';
 
-export async function createDraft(account, { from, to, subject, html, folder_path }) {
+export async function createDraft(account, { from, to, subject, html, folder_path, attachments }) {
   console.log(`[draft] Starting draft creation: from="${from}" to="${to}" subject="${subject}" folder="${folder_path}"`);
   
   const client = createImapClient(account);
@@ -10,8 +10,27 @@ export async function createDraft(account, { from, to, subject, html, folder_pat
     await client.connect();
     console.log(`[draft] Successfully connected to IMAP server`);
 
+    let parsedAttachments = null;
+    if (attachments) {
+      let parsed = attachments;
+      if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch { parsed = null; }
+      }
+      if (parsed && typeof parsed === 'object') {
+        const list = Array.isArray(parsed) ? parsed : Object.values(parsed);
+        if (list.length > 0) {
+          parsedAttachments = list.map(a => ({
+            filename: a.filename,
+            content: a.content,
+            encoding: a.encoding || 'base64',
+            contentType: a.contentType,
+          }));
+        }
+      }
+    }
+
     console.log(`[draft] Building raw draft email`);
-    const rawDraft = buildRawDraft({ from, to, subject, html });
+    const rawDraft = buildRawDraft({ from, to, subject, html, attachments: parsedAttachments });
     console.log(`[draft] Raw draft built, size: ${rawDraft.length} bytes`);
 
     console.log(`[draft] Appending draft to folder "${folder_path}" with \\Draft flag`);
@@ -37,10 +56,12 @@ export async function createDraft(account, { from, to, subject, html, folder_pat
   }
 }
 
-function buildRawDraft({ from, to, subject, html }) {
+function buildRawDraft({ from, to, subject, html, attachments }) {
   const messageId = `<${Date.now()}.${Math.random().toString(36).slice(2)}@draft>`;
   const date = new Date().toUTCString();
-  
+  const hasAttachments = attachments && attachments.length > 0;
+  const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
   let headers = [
     `From: ${from}`,
     `To: ${to}`,
@@ -48,13 +69,35 @@ function buildRawDraft({ from, to, subject, html }) {
     `Date: ${date}`,
     `Message-ID: ${messageId}`,
     `MIME-Version: 1.0`,
-    `Content-Type: text/html; charset=utf-8`,
-    `Content-Transfer-Encoding: quoted-printable`,
   ];
 
-  const encodedBody = quotedPrintableEncode(html || '');
+  if (!hasAttachments) {
+    headers.push(`Content-Type: text/html; charset=utf-8`);
+    headers.push(`Content-Transfer-Encoding: quoted-printable`);
+    const encodedBody = quotedPrintableEncode(html || '');
+    return headers.join('\r\n') + '\r\n\r\n' + encodedBody;
+  }
 
-  return headers.join('\r\n') + '\r\n\r\n' + encodedBody;
+  headers.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+
+  let body = headers.join('\r\n') + '\r\n\r\n';
+
+  body += `--${boundary}\r\n`;
+  body += `Content-Type: text/html; charset=utf-8\r\n`;
+  body += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
+  body += quotedPrintableEncode(html || '') + '\r\n';
+
+  for (const att of attachments) {
+    body += `--${boundary}\r\n`;
+    body += `Content-Type: ${att.contentType || 'application/octet-stream'}; name="${att.filename}"\r\n`;
+    body += `Content-Disposition: attachment; filename="${att.filename}"\r\n`;
+    body += `Content-Transfer-Encoding: base64\r\n\r\n`;
+    body += att.content + '\r\n';
+  }
+
+  body += `--${boundary}--\r\n`;
+
+  return body;
 }
 
 function quotedPrintableEncode(str) {
