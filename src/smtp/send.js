@@ -23,13 +23,22 @@ export async function sendEmail(account, { from, to, subject, html, inReplyTo, r
     messageId,
   };
 
-  if (attachments && attachments.length > 0) {
-    mailOptions.attachments = attachments.map(a => ({
-      filename: a.filename,
-      content: a.content,
-      encoding: a.encoding || 'base64',
-      contentType: a.contentType,
-    }));
+  if (attachments) {
+    let parsed = attachments;
+    if (typeof parsed === 'string') {
+      try { parsed = JSON.parse(parsed); } catch { parsed = null; }
+    }
+    if (parsed && typeof parsed === 'object') {
+      const list = Array.isArray(parsed) ? parsed : Object.values(parsed);
+      if (list.length > 0) {
+        mailOptions.attachments = list.map(a => ({
+          filename: a.filename,
+          content: a.content,
+          encoding: a.encoding || 'base64',
+          contentType: a.contentType,
+        }));
+      }
+    }
   }
 
   if (inReplyTo) {
