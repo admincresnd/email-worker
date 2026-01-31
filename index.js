@@ -94,14 +94,14 @@ app.post('/imap/move', async (req, res) => {
 });
 
 app.post('/smtp/send', async (req, res) => {
-  const { venue_id, from, to, subject, html, inReplyTo, references, folder_path } = req.body;
+  const { venue_id, from, to, subject, html, inReplyTo, references, folder_path, attachments } = req.body;
   if (!venue_id || !from || !to || !subject) {
     return res.status(400).json({ error: 'Missing fields: venue_id, from, to, subject required' });
   }
 
   try {
     const account = await getEmailAccountByVenueId(venue_id);
-    const result = await sendEmail(account, { from, to, subject, html, inReplyTo, references, folder_path });
+    const result = await sendEmail(account, { from, to, subject, html, inReplyTo, references, folder_path, attachments });
     return res.json(result);
   } catch (err) {
     console.error('[smtp/send]', err.message);

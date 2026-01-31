@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import { createImapClient } from '../imap/client.js';
 
-export async function sendEmail(account, { from, to, subject, html, inReplyTo, references, folder_path }) {
+export async function sendEmail(account, { from, to, subject, html, inReplyTo, references, folder_path, attachments }) {
   console.log(`[smtp] Creating transporter: host=${account.smtp_host} port=${account.smtp_port} user=${account.smtp_username}`);
   const transporter = nodemailer.createTransport({
     host: account.smtp_host,
@@ -22,6 +22,15 @@ export async function sendEmail(account, { from, to, subject, html, inReplyTo, r
     html,
     messageId,
   };
+
+  if (attachments && attachments.length > 0) {
+    mailOptions.attachments = attachments.map(a => ({
+      filename: a.filename,
+      content: a.content,
+      encoding: a.encoding || 'base64',
+      contentType: a.contentType,
+    }));
+  }
 
   if (inReplyTo) {
     mailOptions.inReplyTo = inReplyTo;
@@ -67,9 +76,10 @@ async function appendToSentFolder(account, mailOptions, folderPath) {
 }
 
 function buildRawEmail(mailOptions) {
-  const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const date = new Date().toUTCString();
-  
+  const hasAttachments = mailOptions.attachments && mailOptions.attachments.length > 0;
+  const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
   let headers = [
     `From: ${mailOptions.from}`,
     `To: ${mailOptions.to}`,
@@ -77,8 +87,6 @@ function buildRawEmail(mailOptions) {
     `Date: ${date}`,
     `Message-ID: ${mailOptions.messageId}`,
     `MIME-Version: 1.0`,
-    `Content-Type: text/html; charset=utf-8`,
-    `Content-Transfer-Encoding: quoted-printable`,
   ];
 
   if (mailOptions.inReplyTo) {
@@ -89,9 +97,33 @@ function buildRawEmail(mailOptions) {
     headers.push(`References: ${mailOptions.references}`);
   }
 
-  const encodedBody = quotedPrintableEncode(mailOptions.html || '');
+  if (!hasAttachments) {
+    headers.push(`Content-Type: text/html; charset=utf-8`);
+    headers.push(`Content-Transfer-Encoding: quoted-printable`);
+    const encodedBody = quotedPrintableEncode(mailOptions.html || '');
+    return headers.join('\r\n') + '\r\n\r\n' + encodedBody;
+  }
 
-  return headers.join('\r\n') + '\r\n\r\n' + encodedBody;
+  headers.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+
+  let body = headers.join('\r\n') + '\r\n\r\n';
+
+  body += `--${boundary}\r\n`;
+  body += `Content-Type: text/html; charset=utf-8\r\n`;
+  body += `Content-Transfer-Encoding: quoted-printable\r\n\r\n`;
+  body += quotedPrintableEncode(mailOptions.html || '') + '\r\n';
+
+  for (const att of mailOptions.attachments) {
+    body += `--${boundary}\r\n`;
+    body += `Content-Type: ${att.contentType || 'application/octet-stream'}; name="${att.filename}"\r\n`;
+    body += `Content-Disposition: attachment; filename="${att.filename}"\r\n`;
+    body += `Content-Transfer-Encoding: base64\r\n\r\n`;
+    body += att.content + '\r\n';
+  }
+
+  body += `--${boundary}--\r\n`;
+
+  return body;
 }
 
 function quotedPrintableEncode(str) {
