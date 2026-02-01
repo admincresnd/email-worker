@@ -155,7 +155,7 @@ app.post('/smtp/send', async (req, res) => {
   }
 });
 
-app.post('/draft', async (req, res) => {
+app.post('/imap/draft', async (req, res) => {
   console.log('[draft] Request received:', JSON.stringify(req.body));
   const { venue_id, from, to, subject, html, folder_path, attachments } = req.body;
   if (!venue_id || !from || !to || !subject || !folder_path) {
