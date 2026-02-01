@@ -8,7 +8,7 @@ import { moveEmail } from './src/imap/move.js';
 import { sendEmail } from './src/smtp/send.js';
 import { createDraft } from './src/imap/draft.js';
 import { listenToOutlookInbox } from './src/outlook/listener.js';
-import { sendOutlookEmail } from './src/outlook/send.js';
+import { sendOutlookEmail, replyOutlookEmail } from './src/outlook/send.js';
 import { moveOutlookEmail } from './src/outlook/move.js';
 
 dotenv.config();
@@ -124,17 +124,33 @@ app.post('/imap/move', async (req, res) => {
 });
 
 app.post('/outlook/send', async (req, res) => {
-  const { venue_id, from, to, subject, html, inReplyTo, references, conversationId, attachments } = req.body;
+  const { venue_id, from, to, subject, html, attachments } = req.body;
   if (!venue_id || !from || !to || !subject) {
     return res.status(400).json({ error: 'Missing fields: venue_id, from, to, subject required' });
   }
 
   try {
     const account = await getOutlookAccountByVenueId(venue_id);
-    const result = await sendOutlookEmail(account, { from, to, subject, html, inReplyTo, references, conversationId, attachments });
+    const result = await sendOutlookEmail(account, { from, to, subject, html, attachments });
     return res.json(result);
   } catch (err) {
     console.error('[outlook/send]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/outlook/reply', async (req, res) => {
+  const { venue_id, outlook_id, from, to, subject, html, attachments } = req.body;
+  if (!venue_id || !outlook_id) {
+    return res.status(400).json({ error: 'Missing fields: venue_id, outlook_id required' });
+  }
+
+  try {
+    const account = await getOutlookAccountByVenueId(venue_id);
+    const result = await replyOutlookEmail(account, { outlook_id, from, to, subject, html, attachments });
+    return res.json(result);
+  } catch (err) {
+    console.error('[outlook/reply]', err.message);
     return res.status(500).json({ error: err.message });
   }
 });

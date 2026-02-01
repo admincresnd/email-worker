@@ -19,7 +19,7 @@ function parseAttachments(attachments) {
   }));
 }
 
-export async function sendOutlookEmail(account, { from, to, subject, html, inReplyTo, references, conversationId, attachments }) {
+export async function sendOutlookEmail(account, { from, to, subject, html, attachments }) {
   const toRecipients = to.split(',').map((addr) => ({
     emailAddress: { address: addr.trim() },
   }));
@@ -36,20 +36,6 @@ export async function sendOutlookEmail(account, { from, to, subject, html, inRep
     toRecipients,
   };
 
-  if (conversationId) {
-    message.conversationId = conversationId;
-  }
-
-  if (inReplyTo) {
-    message.internetMessageHeaders = message.internetMessageHeaders || [];
-    message.internetMessageHeaders.push({ name: 'In-Reply-To', value: inReplyTo });
-  }
-
-  if (references) {
-    message.internetMessageHeaders = message.internetMessageHeaders || [];
-    message.internetMessageHeaders.push({ name: 'References', value: references });
-  }
-
   const graphAttachments = parseAttachments(attachments);
 
   if (graphAttachments.length > 0) {
@@ -57,7 +43,7 @@ export async function sendOutlookEmail(account, { from, to, subject, html, inRep
     message.hasAttachments = true;
   }
 
-  const result = await graphRequest(account, `${userPath(account)}/sendMail`, {
+  await graphRequest(account, `${userPath(account)}/sendMail`, {
     method: 'POST',
     body: {
       message,
@@ -65,11 +51,45 @@ export async function sendOutlookEmail(account, { from, to, subject, html, inRep
     },
   });
 
-  console.log(`[outlook] Email sent from="${from}" to="${to}" subject="${subject}"`);
+  console.log(`[outlook/send] Email sent from="${from}" to="${to}" subject="${subject}"`);
 
   return {
     success: true,
-    messageId: null,
     response: 'Sent via Graph API',
+  };
+}
+
+export async function replyOutlookEmail(account, { outlook_id, from, to, subject, html, attachments }) {
+  const message = {
+    body: {
+      contentType: 'HTML',
+      content: html || '',
+    },
+  };
+
+  if (to) {
+    message.toRecipients = to.split(',').map((addr) => ({
+      emailAddress: { address: addr.trim() },
+    }));
+  }
+
+  const graphAttachments = parseAttachments(attachments);
+
+  if (graphAttachments.length > 0) {
+    message.attachments = graphAttachments;
+  }
+
+  await graphRequest(account, `${userPath(account)}/messages/${outlook_id}/reply`, {
+    method: 'POST',
+    body: {
+      message,
+    },
+  });
+
+  console.log(`[outlook/reply] Reply sent to outlook_id="${outlook_id}" subject="${subject}"`);
+
+  return {
+    success: true,
+    response: 'Replied via Graph API',
   };
 }
