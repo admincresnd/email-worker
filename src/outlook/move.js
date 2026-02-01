@@ -51,7 +51,7 @@ async function resolveFolderId(account, folderName) {
   return currentFolder.id;
 }
 
-export async function moveOutlookEmail(account, { outlook_id, folder, mark_as_seen, flagged }) {
+export async function moveOutlookEmail(account, { outlook_id, folder, mark_as_seen, flagged, category }) {
   if (!outlook_id) throw new Error('outlook_id is required for Outlook move');
 
   const base = `${userPath(account)}/messages/${outlook_id}`;
@@ -72,6 +72,14 @@ export async function moveOutlookEmail(account, { outlook_id, folder, mark_as_se
       },
     });
     console.log(`[outlook] Marked ${outlook_id} as ${flagged ? 'flagged' : 'unflagged'}`);
+  }
+
+  if (category) {
+    await graphRequest(account, base, {
+      method: 'PATCH',
+      body: { categories: [category] },
+    });
+    console.log(`[outlook] Set category "${category}" on ${outlook_id}`);
   }
 
   if (folder) {

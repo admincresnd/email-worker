@@ -91,15 +91,15 @@ app.post('/imap/resolve-uid', async (req, res) => {
 });
 
 app.post('/outlook/move', async (req, res) => {
-  const { venue_id, uid, outlook_id, folder, mark_as_seen, flagged } = req.body;
+  const { venue_id, uid, outlook_id, folder, mark_as_seen, flagged, category } = req.body;
   const messageId = outlook_id || uid;
-  if (!venue_id || !messageId || !folder) {
-    return res.status(400).json({ error: 'Missing fields: venue_id, uid/outlook_id, folder required' });
+  if (!venue_id || !messageId) {
+    return res.status(400).json({ error: 'Missing fields: venue_id, uid/outlook_id required' });
   }
 
   try {
     const account = await getOutlookAccountByVenueId(venue_id);
-    const result = await moveOutlookEmail(account, { outlook_id: messageId, folder, mark_as_seen, flagged });
+    const result = await moveOutlookEmail(account, { outlook_id: messageId, folder, mark_as_seen, flagged, category });
     return res.json(result);
   } catch (err) {
     console.error('[outlook/move]', err.message);
