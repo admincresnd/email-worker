@@ -1,12 +1,15 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import { mustEnv, sleep, STARTUP_DELAY_MS } from './src/config.js';
-import { getActiveEmailAccounts, getEmailAccountByVenueId } from './src/supabase.js';
+import { getActiveEmailAccounts, getEmailAccountByVenueId, getActiveOutlookAccounts, getOutlookAccountByVenueId } from './src/supabase.js';
 import { listenToInbox } from './src/imap/listener.js';
 import { resolveUid, listFolders } from './src/imap/resolve.js';
 import { moveEmail } from './src/imap/move.js';
 import { sendEmail } from './src/smtp/send.js';
 import { createDraft } from './src/imap/draft.js';
+import { listenToOutlookInbox } from './src/outlook/listener.js';
+import { sendOutlookEmail } from './src/outlook/send.js';
+import { moveOutlookEmail } from './src/outlook/move.js';
 
 dotenv.config();
 
@@ -23,18 +26,28 @@ async function startAllListeners() {
   mustEnv('SUPABASE_SERVICE_ROLE_KEY');
 
   console.log('[startup] Fetching active email accounts...');
-  const accounts = await getActiveEmailAccounts();
-  console.log(`[startup] Found ${accounts.length} active email account(s)`);
+  const emailAccounts = await getActiveEmailAccounts();
+  console.log(`[startup] Found ${emailAccounts.length} active IMAP email account(s)`);
 
-  if (accounts.length === 0) {
-    console.warn('[startup] No active email accounts found! Check email_accounts table.');
-    return;
+  for (const account of emailAccounts) {
+    await sleep(STARTUP_DELAY_MS);
+    console.log(`[startup] Starting IMAP listener for ${account.imap_username} (venue_id=${account.venue_id})`);
+    listenToInbox(account);
   }
 
-  for (const account of accounts) {
-    console.log(`[startup] Will start listener for ${account.imap_username} (venue_id=${account.venue_id}) in ${STARTUP_DELAY_MS}ms`);
+  console.log('[startup] Fetching active outlook accounts...');
+  let outlookAccounts = [];
+  try {
+    outlookAccounts = await getActiveOutlookAccounts();
+  } catch (err) {
+    console.warn('[startup] Could not fetch outlook accounts:', err.message);
+  }
+  console.log(`[startup] Found ${outlookAccounts.length} active Outlook account(s)`);
+
+  for (const account of outlookAccounts) {
     await sleep(STARTUP_DELAY_MS);
-    listenToInbox(account);
+    console.log(`[startup] Starting Outlook listener for ${account.outlook_user_email} (venue_id=${account.venue_id})`);
+    listenToOutlookInbox(account);
   }
 }
 
@@ -77,6 +90,23 @@ app.post('/imap/resolve-uid', async (req, res) => {
   }
 });
 
+app.post('/outlook/move', async (req, res) => {
+  const { venue_id, uid, outlook_id, folder, mark_as_seen, flagged } = req.body;
+  const messageId = outlook_id || uid;
+  if (!venue_id || !messageId || !folder) {
+    return res.status(400).json({ error: 'Missing fields: venue_id, uid/outlook_id, folder required' });
+  }
+
+  try {
+    const account = await getOutlookAccountByVenueId(venue_id);
+    const result = await moveOutlookEmail(account, { outlook_id: messageId, folder, mark_as_seen, flagged });
+    return res.json(result);
+  } catch (err) {
+    console.error('[outlook/move]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/imap/move', async (req, res) => {
   const { venue_id, uid, folder, source_folder, mark_as_seen, flagged } = req.body;
   if (!venue_id || !uid || !folder) {
@@ -89,6 +119,22 @@ app.post('/imap/move', async (req, res) => {
     return res.json(result);
   } catch (err) {
     console.error('[move]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/outlook/send', async (req, res) => {
+  const { venue_id, from, to, subject, html, inReplyTo, references, conversationId, attachments } = req.body;
+  if (!venue_id || !from || !to || !subject) {
+    return res.status(400).json({ error: 'Missing fields: venue_id, from, to, subject required' });
+  }
+
+  try {
+    const account = await getOutlookAccountByVenueId(venue_id);
+    const result = await sendOutlookEmail(account, { from, to, subject, html, inReplyTo, references, conversationId, attachments });
+    return res.json(result);
+  } catch (err) {
+    console.error('[outlook/send]', err.message);
     return res.status(500).json({ error: err.message });
   }
 });
