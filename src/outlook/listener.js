@@ -28,11 +28,41 @@ async function fetchAttachments(account, messageId) {
     }));
 }
 
+const processedIds = new Map();
+const PROCESSED_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_PROCESSED_IDS = 10000;
+
+function markProcessed(accountEmail, msgId) {
+  processedIds.set(`${accountEmail}:${msgId}`, Date.now());
+  if (processedIds.size > MAX_PROCESSED_IDS) {
+    const now = Date.now();
+    for (const [key, ts] of processedIds) {
+      if (now - ts > PROCESSED_TTL_MS) processedIds.delete(key);
+    }
+  }
+}
+
+function isProcessed(accountEmail, msgId) {
+  const key = `${accountEmail}:${msgId}`;
+  const ts = processedIds.get(key);
+  if (!ts) return false;
+  if (Date.now() - ts > PROCESSED_TTL_MS) {
+    processedIds.delete(key);
+    return false;
+  }
+  return true;
+}
+
 async function processMessages(account, messages) {
   const emailsSince = parseEmailsSince(account.emails_since);
 
   for (const msg of messages) {
     if (msg.isDraft) continue;
+
+    if (isProcessed(account.outlook_user_email, msg.id)) {
+      console.log(`[outlook] ${account.outlook_user_email} skipping already-processed id=${msg.id}`);
+      continue;
+    }
 
     const receivedDate = msg.receivedDateTime ? new Date(msg.receivedDateTime) : null;
 
@@ -82,6 +112,7 @@ async function processMessages(account, messages) {
       return false;
     }
 
+    markProcessed(account.outlook_user_email, msg.id);
     console.log(`[outlook] ${account.outlook_user_email} forwarded id=${msg.id}`);
   }
 
